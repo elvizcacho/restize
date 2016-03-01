@@ -6,6 +6,7 @@
 	'use strict';
 
 	var mongoose = require('mongoose');
+	var async = require('async');
 
 	var fields = {};
 	var populate = {};
@@ -405,10 +406,78 @@
 		}
 	};
 
+function getQueries(param, model, value) {
+	var fields = param.match(/(\w+[^.])/g);
+	if (fields.length > 1) {
+		var createInternalQuery = false;
+		var internalQueryString = '';
+		var externalQueryString = '';
+		var internalQuery = {};
+		var internalModel;
+		fields.forEach(function(field) {
+			if (model.schema.path(field)) {
+				if (!createInternalQuery) {
+					externalQueryString += field;
+					externalQueryString += '.';
+				}
+				if (model.schema.path(field).instance === 'ObjectID') {
+					internalModel = model.db.models[model.schema.path(field).options.ref];
+					createInternalQuery = true;
+				}
+			} else { // doesn't belong to schema
+				if (createInternalQuery) {
+					var end = (fields.indexOf(field) < fields.length - 1) ? '.' : '';
+					internalQueryString += field;
+					internalQueryString += end;
+				}
+			}
+		});
+		externalQueryString = externalQueryString.slice(0, -1);
+		internalQuery[internalQueryString] = value;
+		return {
+			externalQueryString: externalQueryString,
+			internalQuery: getQuery(internalModel, internalQuery),
+			internalQueryString: internalQueryString,
+			internalModel: internalModel
+		};
+	} else {
+		return false;
+	}
+}
+
+function deepQuery(data, model, cb) {
+	async.forEachOf(data, function(value, param, cb) {
+		var result = getQueries(param, model, value);
+		if (result) {
+			result.internalModel.find(result.internalQuery, {
+				_id: 1
+			}).exec(function(err, results) {
+				if (results.length) {
+					var ids = [];
+					results.forEach(function(id) {
+						ids.push(id._id.toString());
+					});
+					data[result.externalQueryString + '__in'] = ids.join(',');
+					delete data[result.externalQueryString + '.' + result.internalQueryString];
+					cb(err);
+				} else {
+					cb(err);
+				}
+			});
+		} else {
+			cb();
+		}
+	},
+	function(err) {
+		cb(err);
+	});
+}
+
 	//------------------------------
 	// List
 	//
 	exports.list = function(model, data, callback) {
+		deepQuery(data, model, function(err){
 		var model_name = model.modelName;
 		var pagination = getPagination(data);
 		var m = model.find(getQuery(model, data), fields[model_name], pagination);
@@ -424,6 +493,7 @@
 				if (err) return callback(err);
 				callback(null, result);
 			});
+		});
 	};
 
 	exports.meta = function(model, data, callback) {

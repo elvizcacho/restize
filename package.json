@@ -24,10 +24,14 @@
 	}, {
 		"name": "Andres Herrera",
 		"email": "andres.herrera@gmail.com"
+	},{
+		"name": "Sebastian Vizcaino",
+		"email": "elvizcacho@gmail.com"
 	}],
 	"dependencies": {
 		"express": "^4.12.2",
-		"mongoose": ""
+		"mongoose": "",
+		"async": "1.5.0"
 	},
 	"devDependencies": {
 		"supertest": "~0.12.0"
