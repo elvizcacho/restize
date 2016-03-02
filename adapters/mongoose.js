@@ -414,15 +414,29 @@ function getQueries(param, model, value) {
 		var externalQueryString = '';
 		var internalQuery = {};
 		var internalModel;
+		var prevArray = false;
 		fields.forEach(function(field) {
-			if (model.schema.path(field)) {
+			var isInSchema = (prevArray) ? model.schema.path(fields[fields.indexOf(field) - 1]).schema.paths[field] : model.schema.path(field);
+			if (isInSchema && !createInternalQuery) {
 				if (!createInternalQuery) {
 					externalQueryString += field;
 					externalQueryString += '.';
 				}
-				if (model.schema.path(field).instance === 'ObjectID') {
-					internalModel = model.db.models[model.schema.path(field).options.ref];
-					createInternalQuery = true;
+				if (prevArray) {
+					if (isInSchema.instance === 'ObjectID') {
+						internalModel = model.db.models[isInSchema.options.ref];
+						createInternalQuery = true;
+					}
+				} else {
+					if (model.schema.path(field).instance === 'ObjectID') {
+						internalModel = model.db.models[model.schema.path(field).options.ref];
+						createInternalQuery = true;
+					}
+				}
+				if (!createInternalQuery && model.schema.path(field).instance === 'Array') {
+					prevArray = true;
+				} else{
+					prevArray = false;
 				}
 			} else { // doesn't belong to schema
 				if (createInternalQuery) {
@@ -434,12 +448,16 @@ function getQueries(param, model, value) {
 		});
 		externalQueryString = externalQueryString.slice(0, -1);
 		internalQuery[internalQueryString] = value;
-		return {
-			externalQueryString: externalQueryString,
-			internalQuery: getQuery(internalModel, internalQuery),
-			internalQueryString: internalQueryString,
-			internalModel: internalModel
-		};
+		if (internalModel) {
+			return {
+				externalQueryString: externalQueryString,
+				internalQuery: getQuery(internalModel, internalQuery),
+				internalQueryString: internalQueryString,
+				internalModel: internalModel
+			};
+		} else {
+			return false;	
+		}
 	} else {
 		return false;
 	}
